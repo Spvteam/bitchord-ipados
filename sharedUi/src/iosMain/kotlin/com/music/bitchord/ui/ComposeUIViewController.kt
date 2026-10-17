@@ -113,10 +113,11 @@ object BitChordComposeHost {
      * with Metal 120Hz ProMotion and full edge-to-edge safe-area handling.
      */
     fun createRootViewController(): UIViewController {
-        IOSPlaybackController.ensureInitialized()
+        IOSPlaybackController.installPlatformHosts()
         return ComposeUIViewController(
             configure = {
                 opaque = IS_OPAQUE
+                enforceStrictPlistSanityCheck = false
             }
         ) {
             BitChordIosApp()

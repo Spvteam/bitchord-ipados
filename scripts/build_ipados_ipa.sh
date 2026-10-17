@@ -23,7 +23,7 @@ bash "${ROOT_DIR}/scripts/compile_dsp_ios.sh"
 
 echo "[Stage 2/4] Linking KMP SharedUI Static Framework (iosArm64)"
 chmod +x "${ROOT_DIR}/gradlew" || true
-"${ROOT_DIR}/gradlew" :shared:compileKotlinIosArm64 :sharedUi:linkReleaseFrameworkIosArm64 --no-daemon
+"${ROOT_DIR}/gradlew" :shared:compileKotlinIosArm64 :sharedUi:prepareComposeResourcesTaskForCommonMain :sharedUi:linkReleaseFrameworkIosArm64 --no-daemon
 
 echo "[Stage 3/4] Archiving Xcode Project (iosApp) for generic/platform=iOS"
 mkdir -p "${APP_BUNDLE}"
@@ -34,6 +34,7 @@ if command -v xcrun >/dev/null 2>&1 && [ -d "${FRAMEWORK_DIR}/SharedUI.framework
         -target arm64-apple-ios16.0 \
         -sdk "${IPHONEOS_SDK}" \
         -O \
+        -Xlinker -ObjC \
         -F "${FRAMEWORK_DIR}" \
         -framework SharedUI \
         -L "${ROOT_DIR}/native/libs/iosArm64" \
@@ -56,6 +57,7 @@ if command -v xcrun >/dev/null 2>&1 && [ -d "${FRAMEWORK_DIR}/SharedUI.framework
         -parse-as-library \
         "${ROOT_DIR}/iosApp/Sources/iOSApp.swift" \
         -o "${APP_BUNDLE}/BitChord"
+    chmod 755 "${APP_BUNDLE}/BitChord"
 elif command -v xcodebuild >/dev/null 2>&1; then
     xcodebuild \
         -project "${ROOT_DIR}/iosApp/iosApp.xcodeproj" \

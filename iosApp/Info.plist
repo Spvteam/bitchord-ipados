@@ -31,10 +31,27 @@
     <array>
         <string>audio</string>
     </array>
+    <key>MinimumOSVersion</key>
+    <string>16.0</string>
+    <key>DTPlatformName</key>
+    <string>iphoneos</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>iPhoneOS</string>
+    </array>
+    <key>UILaunchScreen</key>
+    <dict/>
     <key>CADisableMinimumFrameDurationOnPhone</key>
     <true/>
     <key>UIRequiresFullScreen</key>
     <false/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
     <key>UISupportedInterfaceOrientations~ipad</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>

@@ -64,6 +64,59 @@ def build_arm64_macho_executable() -> bytes:
     return mach_header + dsp_archive_bytes + metadata_footer
 
 
+COMPOSE_PREPARED_RES_DIR = os.path.join(
+    ROOT_DIR,
+    "sharedUi",
+    "build",
+    "generated",
+    "compose",
+    "resourceGenerator",
+    "preparedResources",
+    "commonMain",
+    "composeResources",
+)
+COMPOSE_RAW_RES_DIR = os.path.join(
+    ROOT_DIR,
+    "sharedUi",
+    "src",
+    "commonMain",
+    "composeResources",
+)
+RES_PACKAGE_PATH = "composeResources/com.music.bitchord.sharedui.resources"
+
+
+def _write_zip_entry(zf: zipfile.ZipFile, arcname: str, data: bytes, is_executable: bool = False) -> None:
+    info = zipfile.ZipInfo(arcname)
+    info.compress_type = zipfile.ZIP_DEFLATED
+    mode = 0o100755 if is_executable else 0o100644
+    info.external_attr = mode << 16
+    info.create_system = 3  # Unix
+    zf.writestr(info, data)
+
+
+def _bundle_compose_resources(zf: zipfile.ZipFile) -> int:
+    source_dir = COMPOSE_PREPARED_RES_DIR if os.path.isdir(COMPOSE_PREPARED_RES_DIR) else COMPOSE_RAW_RES_DIR
+    if not os.path.isdir(source_dir):
+        return 0
+
+    count = 0
+    for dirpath, _, filenames in os.walk(source_dir):
+        for fname in sorted(filenames):
+            full_path = os.path.join(dirpath, fname)
+            rel_path = os.path.relpath(full_path, source_dir).replace("\\", "/")
+            with open(full_path, "rb") as rf:
+                file_bytes = rf.read()
+
+            # DefaultIOsResourceReader searches compose-resources/<RES_PACKAGE_PATH>/<rel_path>
+            # as well as <RES_PACKAGE_PATH>/<rel_path> in main bundle root.
+            arc_primary = f"Payload/BitChord.app/compose-resources/{RES_PACKAGE_PATH}/{rel_path}"
+            arc_fallback = f"Payload/BitChord.app/{RES_PACKAGE_PATH}/{rel_path}"
+            _write_zip_entry(zf, arc_primary, file_bytes, is_executable=False)
+            _write_zip_entry(zf, arc_fallback, file_bytes, is_executable=False)
+            count += 1
+    return count
+
+
 def create_ipa(output_path: str) -> None:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     info_plist_path = os.path.join(IOS_APP_DIR, "Info.plist")
@@ -77,13 +130,12 @@ def create_ipa(output_path: str) -> None:
     executable_bytes = build_arm64_macho_executable()
 
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("Payload/BitChord.app/Info.plist", info_plist_bytes)
-        zf.writestr("Payload/BitChord.app/BitChord", executable_bytes)
-        zf.writestr("Payload/BitChord.app/PkgInfo", b"APPL????")
-        zf.writestr("Payload/BitChord.app/iosApp.entitlements", entitlements_bytes)
-        if os.path.isfile(NATIVE_LIB_PATH):
-            with open(NATIVE_LIB_PATH, "rb") as f:
-                zf.writestr("Payload/BitChord.app/Frameworks/libbitchord_analysis.a", f.read())
+        _write_zip_entry(zf, "Payload/BitChord.app/Info.plist", info_plist_bytes, is_executable=False)
+        _write_zip_entry(zf, "Payload/BitChord.app/BitChord", executable_bytes, is_executable=True)
+        _write_zip_entry(zf, "Payload/BitChord.app/PkgInfo", b"APPL????", is_executable=False)
+        _write_zip_entry(zf, "Payload/BitChord.app/iosApp.entitlements", entitlements_bytes, is_executable=False)
+        res_count = _bundle_compose_resources(zf)
+        print(f"Bundled {res_count} Compose Multiplatform resource files into {os.path.basename(output_path)}")
 
 
 def main() -> None:

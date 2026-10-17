@@ -459,17 +459,19 @@ private fun PipelineStageRow(label: String, value: String) {
 
 internal object IOSPlaybackController {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val avPlayer = AVPlayer()
-    val audioEngine = IOSAudioEngine()
-    val keychain = IOSKeychainAuthStore()
-    val nowPlayingManager = IOSNowPlayingManager(
-        onPlay = { resume() },
-        onPause = { pause() },
-        onTogglePlayPause = { togglePlayPause() },
-        onNextTrack = { next() },
-        onPreviousTrack = { previous() },
-        onSeekToSeconds = { sec: Double -> seekTo((sec * 1000.0).toLong()) },
-    )
+    private val avPlayer by lazy { AVPlayer() }
+    val audioEngine by lazy { IOSAudioEngine() }
+    val keychain by lazy { IOSKeychainAuthStore() }
+    val nowPlayingManager by lazy {
+        IOSNowPlayingManager(
+            onPlay = { resume() },
+            onPause = { pause() },
+            onTogglePlayPause = { togglePlayPause() },
+            onNextTrack = { next() },
+            onPreviousTrack = { previous() },
+            onSeekToSeconds = { sec: Double -> seekTo((sec * 1000.0).toLong()) },
+        )
+    }
     val position = PlaybackPosition()
 
     var currentSong by mutableStateOf<Song?>(null)
@@ -508,7 +510,7 @@ internal object IOSPlaybackController {
     // Audio DSP settings state
     var activeEqPreset by mutableStateOf("Flat")
         private set
-    var eqBands by mutableStateOf(audioEngine.getEqualizerBands().toList())
+    var eqBands by mutableStateOf(List(AudioEngineController.EQ_BAND_COUNT) { 0f })
         private set
     var crossfadeSeconds by mutableFloatStateOf(4.0f)
         private set
@@ -517,13 +519,20 @@ internal object IOSPlaybackController {
 
     private var playJob: Job? = null
     private var lyricsJob: Job? = null
+    private var hostsInstalled = false
     private var initialized = false
 
-    fun ensureInitialized() {
-        if (initialized) return
-        initialized = true
+    fun installPlatformHosts() {
+        if (hostsInstalled) return
+        hostsInstalled = true
         AppUi.install(IOSAppUiHost)
         PlayerPlatform.install(IOSPlayerHost)
+    }
+
+    fun ensureInitialized() {
+        installPlatformHosts()
+        if (initialized) return
+        initialized = true
 
         try {
             val savedCookie = keychain.getSecret("INNERTUBE_COOKIE")

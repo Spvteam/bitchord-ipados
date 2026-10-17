@@ -88,7 +88,11 @@ kotlin {
         androidMain.get().dependsOn(jvmSharedMain)
         jvmMain.get().dependsOn(jvmSharedMain)
 
-        val iosMain by getting
+        val iosMain by getting {
+            dependencies {
+                api("io.ktor:ktor-client-darwin:3.5.2")
+            }
+        }
 
         commonMain.dependencies {
             api(project(":shared"))

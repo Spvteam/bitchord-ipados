@@ -27,12 +27,13 @@ class IOSAudioEngine : AudioEngineController {
 
     private val lock = PlatformLock()
 
-    private val avEngine = AVAudioEngine()
-    private val deckANode = AVAudioPlayerNode()
-    private val deckBNode = AVAudioPlayerNode()
-    private val deckATimePitch = AVAudioUnitTimePitch()
-    private val deckBTimePitch = AVAudioUnitTimePitch()
-    private val equalizerNode = AVAudioUnitEQ(numberOfBands = AudioEngineController.EQ_BAND_COUNT.toULong())
+    private val avEngine by lazy { AVAudioEngine() }
+    private val deckANode by lazy { AVAudioPlayerNode() }
+    private val deckBNode by lazy { AVAudioPlayerNode() }
+    private val deckATimePitch by lazy { AVAudioUnitTimePitch() }
+    private val deckBTimePitch by lazy { AVAudioUnitTimePitch() }
+    private val equalizerNode by lazy { AVAudioUnitEQ(numberOfBands = AudioEngineController.EQ_BAND_COUNT.toULong()) }
+    private var audioGraphAttached: Boolean = false
 
     private val _visualizerFftFlow = MutableStateFlow(FloatArray(AudioEngineController.FFT_BIN_COUNT))
     override val visualizerFftFlow: StateFlow<FloatArray> = _visualizerFftFlow.asStateFlow()
@@ -68,11 +69,9 @@ class IOSAudioEngine : AudioEngineController {
 
     private var eqBands: FloatArray = AudioEngineController.EQ_PRESETS["Flat"]!!.copyOf()
 
-    init {
-        setupAudioGraph()
-    }
-
-    private fun setupAudioGraph() {
+    private fun ensureAudioGraph() {
+        if (audioGraphAttached) return
+        audioGraphAttached = true
         runCatching {
             avEngine.attachNode(deckANode)
             avEngine.attachNode(deckBNode)

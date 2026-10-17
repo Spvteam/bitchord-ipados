@@ -93,7 +93,7 @@ kotlin {
 
         val iosMain by getting {
             dependencies {
-                implementation("io.ktor:ktor-client-darwin:3.5.2")
+                api("io.ktor:ktor-client-darwin:3.5.2")
             }
         }
 

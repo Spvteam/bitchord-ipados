@@ -21,6 +21,7 @@ import platform.Foundation.CFBridgingRetain
 import platform.Foundation.NSData
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.NSUserDefaults
 import platform.Foundation.create
 import platform.Foundation.dataUsingEncoding
 import platform.Security.SecItemAdd
@@ -44,7 +45,8 @@ import platform.posix.memcpy
 /**
  * Hardware-backed iOS Keychain authentication & credential store for iPadOS / iOS (`WP-07`).
  * Replaces Android `EncryptedSharedPreferences` and desktop credential files with Apple `Security` framework
- * (`SecItemAdd`, `SecItemCopyMatching`, `SecItemUpdate`, `SecItemDelete`) using `kSecAttrAccessibleAfterFirstUnlock`.
+ * (`SecItemAdd`, `SecItemCopyMatching`, `SecItemUpdate`, `SecItemDelete`) using `kSecAttrAccessibleAfterFirstUnlock`,
+ * with automatic `NSUserDefaults` fallback when sideloaded under a Free Developer Profile.
  */
 @OptIn(ExperimentalForeignApi::class)
 class IOSKeychainAuthStore(
@@ -84,6 +86,9 @@ class IOSKeychainAuthStore(
     fun putSecret(key: String, value: String): Int = lock.withLock {
         val scopedKey = scopedAccountKey(key)
         memoryMirror[scopedKey] = value
+        runCatching {
+            NSUserDefaults.standardUserDefaults.setObject(value, forKey = "$serviceName.$scopedKey")
+        }
 
         val valueData = (value as NSString).dataUsingEncoding(NSUTF8StringEncoding) ?: return@withLock 0
         deleteNativeKeychainItem(scopedKey)
@@ -115,8 +120,8 @@ class IOSKeychainAuthStore(
         val scopedKey = scopedAccountKey(key)
         memoryMirror[scopedKey]?.let { return@withLock it }
 
-        memScoped {
-            val query = CFDictionaryCreateMutable(kCFAllocatorDefault, 5, null, null) ?: return@withLock null
+        val keychainVal = memScoped {
+            val query = CFDictionaryCreateMutable(kCFAllocatorDefault, 5, null, null) ?: return@memScoped null
             val serviceRef = CFBridgingRetain(serviceName as NSString)
             val accountRef = CFBridgingRetain(scopedKey as NSString)
             val resultRef = alloc<CFTypeRefVar>()
@@ -129,9 +134,9 @@ class IOSKeychainAuthStore(
 
                 val status = SecItemCopyMatching(query, resultRef.ptr)
                 if (status == errSecSuccess && resultRef.value != null) {
-                    val nsData = CFBridgingRelease(resultRef.value) as? NSData ?: return@withLock null
+                    val nsData = CFBridgingRelease(resultRef.value) as? NSData ?: return@memScoped null
                     val length = nsData.length.toInt()
-                    if (length == 0) return@withLock ""
+                    if (length == 0) return@memScoped ""
                     val bytes = ByteArray(length)
                     bytes.usePinned { pinned ->
                         memcpy(pinned.addressOf(0), nsData.bytes, nsData.length)
@@ -148,6 +153,15 @@ class IOSKeychainAuthStore(
                 CFRelease(query)
             }
         }
+        if (keychainVal != null) return@withLock keychainVal
+
+        val defaultsVal = runCatching {
+            NSUserDefaults.standardUserDefaults.stringForKey("$serviceName.$scopedKey")
+        }.getOrNull()
+        if (defaultsVal != null) {
+            memoryMirror[scopedKey] = defaultsVal
+        }
+        defaultsVal
     }
 
     /**
@@ -156,6 +170,9 @@ class IOSKeychainAuthStore(
     fun updateSecret(key: String, newValue: String): Int = lock.withLock {
         val scopedKey = scopedAccountKey(key)
         memoryMirror[scopedKey] = newValue
+        runCatching {
+            NSUserDefaults.standardUserDefaults.setObject(newValue, forKey = "$serviceName.$scopedKey")
+        }
         val valueData = (newValue as NSString).dataUsingEncoding(NSUTF8StringEncoding) ?: return@withLock 0
 
         val query = CFDictionaryCreateMutable(kCFAllocatorDefault, 3, null, null) ?: return@withLock 0
@@ -191,6 +208,9 @@ class IOSKeychainAuthStore(
     fun deleteSecret(key: String): Int = lock.withLock {
         val scopedKey = scopedAccountKey(key)
         memoryMirror.remove(scopedKey)
+        runCatching {
+            NSUserDefaults.standardUserDefaults.removeObjectForKey("$serviceName.$scopedKey")
+        }
         deleteNativeKeychainItem(scopedKey)
         0
     }
