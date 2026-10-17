@@ -90,12 +90,13 @@ class IOSKeychainAuthStore(
             NSUserDefaults.standardUserDefaults.setObject(value, forKey = "$serviceName.$scopedKey")
         }
 
-        val valueData = (value as NSString).dataUsingEncoding(NSUTF8StringEncoding) ?: return@withLock 0
+        val nsVal = NSString.create(string = value)
+        val valueData = nsVal.dataUsingEncoding(NSUTF8StringEncoding) ?: return@withLock 0
         deleteNativeKeychainItem(scopedKey)
 
         val query = CFDictionaryCreateMutable(kCFAllocatorDefault, 5, null, null) ?: return@withLock 0
-        val serviceRef = CFBridgingRetain(serviceName as NSString)
-        val accountRef = CFBridgingRetain(scopedKey as NSString)
+        val serviceRef = CFBridgingRetain(NSString.create(string = serviceName))
+        val accountRef = CFBridgingRetain(NSString.create(string = scopedKey))
         val dataRef = CFBridgingRetain(valueData)
         try {
             CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword)
@@ -122,8 +123,8 @@ class IOSKeychainAuthStore(
 
         val keychainVal = memScoped {
             val query = CFDictionaryCreateMutable(kCFAllocatorDefault, 5, null, null) ?: return@memScoped null
-            val serviceRef = CFBridgingRetain(serviceName as NSString)
-            val accountRef = CFBridgingRetain(scopedKey as NSString)
+            val serviceRef = CFBridgingRetain(NSString.create(string = serviceName))
+            val accountRef = CFBridgingRetain(NSString.create(string = scopedKey))
             val resultRef = alloc<CFTypeRefVar>()
             try {
                 CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword)
@@ -173,15 +174,16 @@ class IOSKeychainAuthStore(
         runCatching {
             NSUserDefaults.standardUserDefaults.setObject(newValue, forKey = "$serviceName.$scopedKey")
         }
-        val valueData = (newValue as NSString).dataUsingEncoding(NSUTF8StringEncoding) ?: return@withLock 0
+        val nsNewVal = NSString.create(string = newValue)
+        val valueData = nsNewVal.dataUsingEncoding(NSUTF8StringEncoding) ?: return@withLock 0
 
         val query = CFDictionaryCreateMutable(kCFAllocatorDefault, 3, null, null) ?: return@withLock 0
         val updateDict = CFDictionaryCreateMutable(kCFAllocatorDefault, 1, null, null) ?: run {
             CFRelease(query)
             return@withLock 0
         }
-        val serviceRef = CFBridgingRetain(serviceName as NSString)
-        val accountRef = CFBridgingRetain(scopedKey as NSString)
+        val serviceRef = CFBridgingRetain(NSString.create(string = serviceName))
+        val accountRef = CFBridgingRetain(NSString.create(string = scopedKey))
         val dataRef = CFBridgingRetain(valueData)
         try {
             CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword)
@@ -217,8 +219,8 @@ class IOSKeychainAuthStore(
 
     private fun deleteNativeKeychainItem(scopedKey: String) {
         val query = CFDictionaryCreateMutable(kCFAllocatorDefault, 3, null, null) ?: return
-        val serviceRef = CFBridgingRetain(serviceName as NSString)
-        val accountRef = CFBridgingRetain(scopedKey as NSString)
+        val serviceRef = CFBridgingRetain(NSString.create(string = serviceName))
+        val accountRef = CFBridgingRetain(NSString.create(string = scopedKey))
         try {
             CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword)
             CFDictionarySetValue(query, kSecAttrService, serviceRef)

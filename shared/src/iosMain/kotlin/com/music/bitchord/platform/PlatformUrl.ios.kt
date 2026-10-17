@@ -1,10 +1,9 @@
-@file:Suppress("CAST_NEVER_SUCCEEDS")
-
 package com.music.bitchord.platform
 
 import platform.Foundation.NSCharacterSet
 import platform.Foundation.NSMutableCharacterSet
 import platform.Foundation.NSString
+import platform.Foundation.create
 import platform.Foundation.stringByAddingPercentEncodingWithAllowedCharacters
 import platform.Foundation.stringByRemovingPercentEncoding
 
@@ -20,13 +19,13 @@ actual object PlatformUrl {
 
     actual fun urlEncode(s: String): String {
         if (s.isEmpty()) return s
-        val nsString = s as NSString
+        val nsString = NSString.create(string = s)
         return nsString.stringByAddingPercentEncodingWithAllowedCharacters(rfc3986AllowedCharacters) ?: s
     }
 
     actual fun urlDecode(s: String): String {
         if (s.isEmpty()) return s
-        val nsString = s as NSString
+        val nsString = NSString.create(string = s)
         return nsString.stringByRemovingPercentEncoding ?: s
     }
 
