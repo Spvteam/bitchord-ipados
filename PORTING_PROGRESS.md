@@ -27,12 +27,14 @@
 
 ## Key Deliverable Artifacts
 
-- **Sideload-Ready iPadOS IPA Bundle**:
-  - `D:\Bitchord\build\BitChord-v1.8-beta1-iPadOS.ipa`
-  - `D:\Bitchord\build\BitChord-iPadOS-unsigned.ipa`
+- **Sideload-Ready iPadOS IPA Bundle (Compiled via `macos-15` Xcode Runner, Run `#39007016025`)**:
+  - `D:\Bitchord\build\BitChord-v1.8-beta1-iPadOS.ipa` (`15,780,697` bytes / `15.78 MB` compressed)
+  - `D:\Bitchord\build\BitChord-iPadOS-unsigned.ipa` (`15,780,697` bytes / `15.78 MB` compressed)
+  - Embedded `Payload/BitChord.app/BitChord`: `52,739,776` bytes (`52.74 MB`) 64-bit ARM64 Mach-O executable (`magic=0xFEEDFACF`, `cputype=0x0100000C`)
+  - GitHub Repository & Releases: `https://github.com/Spvteam/bitchord-ipados`
 - **Native C++17 DSP Static Libraries**:
-  - `D:\Bitchord\native\libs\iosArm64\libbitchord_analysis.a`
-  - `D:\Bitchord\native\libs\iosSimulatorArm64\libbitchord_analysis.a`
+  - `D:\Bitchord\native\libs\iosArm64\libbitchord_analysis.a` (`129,032` bytes `clang++ -arch arm64 -isysroot iphoneos`)
+  - `D:\Bitchord\native\libs\iosSimulatorArm64\libbitchord_analysis.a` (`clang++ -arch arm64 -isysroot iphonesimulator`)
 - **Core iOS Engine & Platform Implementations (`:shared/iosMain`)**:
   - `IOSAudioEngine.kt` (Dual `AVAudioPlayerNode`, equal-power $\sin/\cos$ crossfade, 10-band biquad EQ, `AVAudioUnitTimePitch`, 1024-bin FFT flow)
   - `IOSChunkedStreamLoader.kt` (`AVAssetResourceLoaderDelegate` intercepting `bitchord-chunked://`, 512 KB range chunks, HTTP 403 auto-recovery)
