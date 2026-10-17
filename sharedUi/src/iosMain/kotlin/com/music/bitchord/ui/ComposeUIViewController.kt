@@ -112,11 +112,14 @@ object BitChordComposeHost {
      * Creates the root `UIViewController` hosting the Compose Multiplatform hierarchy
      * with Metal 120Hz ProMotion and full edge-to-edge safe-area handling.
      */
-    fun createRootViewController(): UIViewController = ComposeUIViewController(
-        configure = {
-            opaque = IS_OPAQUE
+    fun createRootViewController(): UIViewController {
+        IOSPlaybackController.ensureInitialized()
+        return ComposeUIViewController(
+            configure = {
+                opaque = IS_OPAQUE
+            }
+        ) {
+            BitChordIosApp()
         }
-    ) {
-        // BitChord root multiplatform UI rendered inside Skiko Metal canvas
     }
 }
