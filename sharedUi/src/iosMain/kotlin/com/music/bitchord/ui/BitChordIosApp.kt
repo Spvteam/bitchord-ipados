@@ -253,7 +253,7 @@ internal object IOSPlayerHost : PlayerHost {
         val res = LyricsTranslation.translate(trackId, lines, targetLanguageTag)
         return when (res) {
             is LyricsTranslation.Result.Translated -> LyricsTranslationResult.Translated(res.lines)
-            is LyricsTranslation.Result.SameLanguage -> LyricsTranslationResult.SameLanguage(res.sourceLanguage)
+            is LyricsTranslation.Result.SameLanguage -> LyricsTranslationResult.SameLanguage(res.language)
             else -> LyricsTranslationResult.Unavailable
         }
     }
@@ -263,7 +263,7 @@ internal object IOSPlayerHost : PlayerHost {
         lines: List<LyricLine>,
         targetLanguageTag: String,
     ): LyricsRomanizationResult {
-        val res = LyricsTranslation.romanize(trackId, lines)
+        val res = LyricsTranslation.romanize(trackId, lines, targetLanguageTag)
         return when (res) {
             is LyricsTranslation.RomanizationResult.Romanized -> LyricsRomanizationResult.Romanized(res.lines)
             is LyricsTranslation.RomanizationResult.AlreadyRomanized -> LyricsRomanizationResult.AlreadyRomanized
@@ -281,7 +281,14 @@ internal object IOSPlaybackController {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val avPlayer = AVPlayer()
     val audioEngine = IOSAudioEngine()
-    val nowPlayingManager = IOSNowPlayingManager()
+    val nowPlayingManager = IOSNowPlayingManager(
+        onPlay = { resume() },
+        onPause = { pause() },
+        onTogglePlayPause = { togglePlayPause() },
+        onNextTrack = { next() },
+        onPreviousTrack = { previous() },
+        onSeekToSeconds = { sec: Double -> seekTo((sec * 1000.0).toLong()) },
+    )
     val position = PlaybackPosition()
 
     var currentSong by mutableStateOf<Song?>(null)
@@ -323,24 +330,14 @@ internal object IOSPlaybackController {
 
         try {
             val keychain = IOSKeychainAuthStore()
-            val savedCookies = keychain.loadAllCookies()
-            if (savedCookies.isNotEmpty()) {
-                Innertube.cookie = savedCookies.entries.joinToString("; ") { entry ->
-                    "${entry.key}=${entry.value}"
-                }
+            val savedCookie = keychain.getSecret("INNERTUBE_COOKIE")
+            if (!savedCookie.isNullOrBlank()) {
+                Innertube.cookie = savedCookie
             }
-            val sandbox = IOSSandboxStorage()
-            sandbox.ensureDirectories()
+            IOSSandboxStorage.resolveApplicationSupportDirectory()
             InnerTubeXResolver.init(poTokenProvider = IOSPoTokenProvider.shared)
             nowPlayingManager.configureAudioSession()
-            nowPlayingManager.registerRemoteCommands(
-                onPlay = { resume() },
-                onPause = { pause() },
-                onNext = { next() },
-                onPrevious = { previous() },
-                onSeekTo = { sec: Double -> seekTo((sec * 1000.0).toLong()) },
-            )
-            audioEngine.startEngine()
+            nowPlayingManager.registerRemoteCommands()
         } catch (_: Throwable) {
         }
 
@@ -420,13 +417,13 @@ internal object IOSPlaybackController {
                 }
             }
             isLoading = false
-            nowPlayingManager.updateNowPlaying(
+            nowPlayingManager.updateNowPlayingMetadata(
                 title = song.title,
                 artist = song.artist,
-                album = song.albumName ?: "",
+                albumTitle = song.albumName ?: "",
                 durationSeconds = (durationMs / 1000L).toDouble().coerceAtLeast(1.0),
                 elapsedSeconds = 0.0,
-                isPlaying = isPlaying,
+                playbackRate = if (isPlaying) 1.0 else 0.0,
             )
         }
     }
@@ -471,13 +468,13 @@ internal object IOSPlaybackController {
         avPlayer.pause()
         isPlaying = false
         val s = currentSong ?: return
-        nowPlayingManager.updateNowPlaying(
+        nowPlayingManager.updateNowPlayingMetadata(
             title = s.title,
             artist = s.artist,
-            album = s.albumName ?: "",
+            albumTitle = s.albumName ?: "",
             durationSeconds = (durationMs / 1000L).toDouble(),
             elapsedSeconds = (position.positionMs / 1000L).toDouble(),
-            isPlaying = false,
+            playbackRate = 0.0,
         )
     }
 
@@ -485,13 +482,13 @@ internal object IOSPlaybackController {
         avPlayer.play()
         isPlaying = true
         val s = currentSong ?: return
-        nowPlayingManager.updateNowPlaying(
+        nowPlayingManager.updateNowPlayingMetadata(
             title = s.title,
             artist = s.artist,
-            album = s.albumName ?: "",
+            albumTitle = s.albumName ?: "",
             durationSeconds = (durationMs / 1000L).toDouble(),
             elapsedSeconds = (position.positionMs / 1000L).toDouble(),
-            isPlaying = true,
+            playbackRate = 1.0,
         )
     }
 
