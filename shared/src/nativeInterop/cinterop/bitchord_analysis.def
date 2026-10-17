@@ -1,6 +1,5 @@
 headers = bitchord_ios_bridge.h
 headerFilter = bitchord_ios_bridge.h
 package = com.music.bitchord.native.analysis
-compilerOpts = -std=c++17
 staticLibraries = libbitchord_analysis.a
 linkerOpts = -lc++
