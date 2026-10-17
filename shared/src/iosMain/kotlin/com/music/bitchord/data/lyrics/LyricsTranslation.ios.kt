@@ -4,7 +4,6 @@ package com.music.bitchord.data.lyrics
 
 import com.music.bitchord.platform.PlatformCrypto
 import com.music.bitchord.platform.PlatformLock
-import com.music.bitchord.platform.withLock
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
 import io.ktor.client.request.forms.submitForm

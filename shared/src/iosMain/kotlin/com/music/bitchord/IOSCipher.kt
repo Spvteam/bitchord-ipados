@@ -2,7 +2,6 @@ package com.music.bitchord
 
 import com.music.bitchord.data.innertube.JsEvaluator
 import com.music.bitchord.platform.PlatformLock
-import com.music.bitchord.platform.withLock
 import platform.JavaScriptCore.JSContext
 
 /**

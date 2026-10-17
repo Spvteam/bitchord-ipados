@@ -3,7 +3,6 @@
 package com.music.bitchord
 
 import com.music.bitchord.platform.PlatformLock
-import com.music.bitchord.platform.withLock
 import com.music.bitchord.playback.AudioEngineController
 import com.music.bitchord.playback.DeckId
 import com.music.bitchord.playback.SmartTransitionPlan

@@ -3,7 +3,6 @@ package com.music.bitchord
 import com.music.bitchord.platform.PlatformClock
 import com.music.bitchord.platform.PlatformCrypto
 import com.music.bitchord.platform.PlatformLock
-import com.music.bitchord.platform.withLock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc

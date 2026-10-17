@@ -2,7 +2,6 @@ package com.music.bitchord.data
 
 import com.music.bitchord.platform.PlatformClock
 import com.music.bitchord.platform.PlatformLock
-import com.music.bitchord.platform.withLock
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSCachesDirectory
@@ -65,6 +64,8 @@ object IOSSandboxStorage {
         ensureDirectoryExists(dir, excludeFromBackup = false)
         return dir
     }
+
+    fun resolveApplicationSupportDirectory(): String = applicationSupportDirectoryPath()
 
     /**
      * Full path to `bitchord_user.db` inside `NSApplicationSupportDirectory`.

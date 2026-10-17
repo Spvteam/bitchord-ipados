@@ -137,4 +137,20 @@ actual object PlatformCrypto {
         }
         return out
     }
+
+    private val HEX_CHARS = "0123456789abcdef".toCharArray()
+
+    private fun ByteArray.toHexLower(): String {
+        val chars = CharArray(size * 2)
+        for (i in indices) {
+            val v = this[i].toInt() and 0xFF
+            chars[i * 2] = HEX_CHARS[v ushr 4]
+            chars[i * 2 + 1] = HEX_CHARS[v and 0x0F]
+        }
+        return chars.concatToString()
+    }
+
+    fun sha1Hex(bytes: ByteArray): String = sha1(bytes).toHexLower()
+
+    fun sha256Hex(bytes: ByteArray): String = sha256(bytes).toHexLower()
 }

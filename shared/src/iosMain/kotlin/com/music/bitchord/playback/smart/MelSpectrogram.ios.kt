@@ -54,7 +54,7 @@ actual object MelSpectrogram {
     actual fun resample(samples: FloatArray, inputRate: Double, outputRate: Double): FloatArray? {
         if (samples.isEmpty() || inputRate <= 0.0 || outputRate <= 0.0) return null
         if (inputRate == outputRate) return samples.copyOf()
-        val nativeCount = bitchord_resample_output_count(samples.size, inputRate.toInt(), outputRate.toInt())
+        val nativeCount = bitchord_resample_output_count(samples.size, inputRate, outputRate)
         val ratio = outputRate / inputRate
         val fallbackCount = (samples.size * ratio).roundToInt()
         val outLength = if (nativeCount > 0) nativeCount else fallbackCount
@@ -66,8 +66,8 @@ actual object MelSpectrogram {
                 bitchord_resample(
                     pinnedIn.addressOf(0),
                     samples.size,
-                    inputRate.toInt(),
-                    outputRate.toInt(),
+                    inputRate,
+                    outputRate,
                     pinnedOut.addressOf(0),
                     outLength
                 )

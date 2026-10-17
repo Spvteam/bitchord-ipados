@@ -7,7 +7,6 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.platform.PlatformLock
 import com.music.bitchord.platform.PlatformUrl
-import com.music.bitchord.platform.withLock
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
 import io.ktor.client.request.get

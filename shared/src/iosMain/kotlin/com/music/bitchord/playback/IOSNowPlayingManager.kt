@@ -3,7 +3,6 @@
 package com.music.bitchord.playback
 
 import com.music.bitchord.platform.PlatformLock
-import com.music.bitchord.platform.withLock
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryOptionAllowAirPlay
 import platform.AVFAudio.AVAudioSessionCategoryOptionAllowBluetoothA2DP

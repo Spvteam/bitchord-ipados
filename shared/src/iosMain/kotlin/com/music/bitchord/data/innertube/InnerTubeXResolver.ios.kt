@@ -18,7 +18,6 @@ import com.metrolist.innertubex.models.YouTubeLocale
 import com.music.bitchord.data.MonotonicClock
 import com.music.bitchord.data.TrackLog
 import com.music.bitchord.platform.PlatformLock
-import com.music.bitchord.platform.withLock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

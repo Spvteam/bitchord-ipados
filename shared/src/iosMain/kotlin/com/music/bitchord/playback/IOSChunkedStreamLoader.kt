@@ -7,7 +7,6 @@ import com.music.bitchord.data.innertube.IOSPoTokenProvider
 import com.music.bitchord.data.innertube.InnerTubeXResolver
 import com.music.bitchord.data.innertube.PlayerClient
 import com.music.bitchord.platform.PlatformLock
-import com.music.bitchord.platform.withLock
 import platform.AVFoundation.AVAssetResourceLoaderDelegateProtocol
 import platform.AVFoundation.AVAssetResourceLoadingRequest
 import platform.darwin.NSObject
@@ -25,7 +24,7 @@ class IOSChunkedStreamLoader(
     val contentLength: Long = 4_000_000L,
     private val sandboxStorage: IOSSandboxStorage? = null,
     private val poTokenProvider: IOSPoTokenProvider = IOSPoTokenProvider(),
-    private val streamResolver: InnerTubeXResolver = InnerTubeXResolver(poTokenProvider = poTokenProvider),
+    private val streamResolver: InnerTubeXResolver = InnerTubeXResolver,
 ) : NSObject(), AVAssetResourceLoaderDelegateProtocol {
 
     data class ChunkRequestResult(
@@ -142,7 +141,7 @@ class IOSChunkedStreamLoader(
         activePoToken = refreshedPoToken
         if (videoId.isNotBlank()) {
             poTokenProvider.invalidateCache()
-            streamResolver.onRefused(videoId, refusedClient)
+            streamResolver.exclude(videoId, refusedClient.clientName)
         }
         recoverySuccessful = true
         true

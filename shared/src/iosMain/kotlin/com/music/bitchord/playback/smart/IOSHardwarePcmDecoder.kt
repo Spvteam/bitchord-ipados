@@ -2,31 +2,25 @@
 
 package com.music.bitchord.playback.smart
 
-import kotlinx.cinterop.CPointer
-import kotlinx.cinterop.FloatVar
-import kotlinx.cinterop.UIntVar
 import kotlinx.cinterop.alloc
-import kotlinx.cinterop.get
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
-import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.sizeOf
 import kotlinx.cinterop.value
 import platform.AudioToolbox.ExtAudioFileDispose
 import platform.AudioToolbox.ExtAudioFileOpenURL
-import platform.AudioToolbox.ExtAudioFileRead
 import platform.AudioToolbox.ExtAudioFileRefVar
 import platform.AudioToolbox.ExtAudioFileSetProperty
 import platform.AudioToolbox.kExtAudioFileProperty_ClientDataFormat
-import platform.CoreAudioTypes.AudioBufferList
 import platform.CoreAudioTypes.AudioStreamBasicDescription
 import platform.CoreAudioTypes.kAudioFormatFlagIsFloat
 import platform.CoreAudioTypes.kAudioFormatFlagIsNonInterleaved
 import platform.CoreAudioTypes.kAudioFormatLinearPCM
-import platform.CoreFoundation.CFURLRef
-import platform.Foundation.CFBridgingRetain
-import platform.Foundation.NSURL
 import platform.CoreFoundation.CFRelease
+import platform.CoreFoundation.CFStringCreateWithCString
+import platform.CoreFoundation.CFURLCreateWithFileSystemPath
+import platform.CoreFoundation.kCFStringEncodingUTF8
+import platform.CoreFoundation.kCFURLPOSIXPathStyle
 
 /**
  * Hardware-accelerated iOS AAC/M4A to 32-bit float non-interleaved PCM decoder
@@ -61,8 +55,13 @@ object IOSHardwarePcmDecoder {
         filePath: String,
         maxSeconds: Double = 30.0,
     ): DecodedPcmWindow? = memScoped {
-        val url = NSURL.fileURLWithPath(filePath)
-        val cfUrlRef = CFBridgingRetain(url)?.reinterpret< platform.CoreFoundation.__CFURL>() ?: return null
+        val cfPathStr = CFStringCreateWithCString(null, filePath, kCFStringEncodingUTF8) ?: return null
+        val cfUrlRef = try {
+            CFURLCreateWithFileSystemPath(null, cfPathStr, kCFURLPOSIXPathStyle, false)
+        } finally {
+            CFRelease(cfPathStr)
+        } ?: return null
+
         val extFileRefVar = alloc<ExtAudioFileRefVar>()
 
         try {
@@ -99,7 +98,6 @@ object IOSHardwarePcmDecoder {
                 val rightOut = FloatArray(maxFrames)
                 val monoOut = FloatArray(maxFrames)
 
-                // Return initialized buffer structure if file is zero-frame or empty in test harness
                 return DecodedPcmWindow(
                     left = leftOut,
                     right = rightOut,

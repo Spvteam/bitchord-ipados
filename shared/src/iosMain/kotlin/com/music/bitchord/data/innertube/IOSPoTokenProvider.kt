@@ -3,11 +3,9 @@ package com.music.bitchord.data.innertube
 import com.metrolist.innertubex.extraction.PoTokenResult
 import com.metrolist.innertubex.extraction.TokenProvider
 import com.metrolist.innertubex.extraction.TokenProviderCapabilities
-import com.metrolist.innertubex.extraction.strategy.PoTokenProviderKind
 import com.music.bitchord.platform.PlatformClock
 import com.music.bitchord.platform.PlatformCrypto
 import com.music.bitchord.platform.PlatformLock
-import com.music.bitchord.platform.withLock
 
 /**
  * Headless `WKWebView` BotGuard `poToken` minter for iPadOS / iOS.
@@ -42,7 +40,6 @@ class IOSPoTokenProvider(
         private set
 
     override val capabilities: TokenProviderCapabilities = TokenProviderCapabilities(
-        providers = setOf(PoTokenProviderKind.WEBVIEW),
         usesWebView = true,
     )
 
@@ -108,11 +105,15 @@ class IOSPoTokenProvider(
         )
     }
 
-    override suspend fun invalidateAttestation() {
+    fun invalidateCache() {
         lock.withLock {
             tokenCache.clear()
             handshakeStage = HandshakeStage.IDLE
         }
+    }
+
+    override suspend fun invalidateAttestation() {
+        invalidateCache()
     }
 
     override suspend fun close() {

@@ -29,4 +29,25 @@ actual object PlatformUrl {
         val nsString = s as NSString
         return nsString.stringByRemovingPercentEncoding ?: s
     }
+
+    fun decodeComponent(s: String): String = urlDecode(s)
+
+    fun extractScheme(url: String): String? {
+        val idx = url.indexOf("://")
+        return if (idx > 0) url.substring(0, idx) else null
+    }
+
+    fun extractHost(url: String): String? {
+        val afterScheme = url.substringAfter("://", "")
+        if (afterScheme.isEmpty()) return null
+        return afterScheme.substringBefore('/').substringBefore('?').substringBefore('#').substringBefore(':')
+    }
+
+    fun extractPath(url: String): String? {
+        val afterScheme = url.substringAfter("://", "")
+        if (afterScheme.isEmpty()) return null
+        val slashIdx = afterScheme.indexOf('/')
+        if (slashIdx < 0) return "/"
+        return afterScheme.substring(slashIdx).substringBefore('?').substringBefore('#')
+    }
 }
