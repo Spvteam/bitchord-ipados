@@ -25,7 +25,17 @@ class IOSChunkedStreamLoader(
     private val sandboxStorage: IOSSandboxStorage? = null,
     private val poTokenProvider: IOSPoTokenProvider = IOSPoTokenProvider(),
     private val streamResolver: InnerTubeXResolver = InnerTubeXResolver,
-) : NSObject(), AVAssetResourceLoaderDelegateProtocol {
+) {
+    val nativeDelegate: AVAssetResourceLoaderDelegateProtocol =
+        object : NSObject(), AVAssetResourceLoaderDelegateProtocol {
+            override fun resourceLoader(
+                resourceLoader: platform.AVFoundation.AVAssetResourceLoader,
+                shouldWaitForLoadingOfRequestedResource: AVAssetResourceLoadingRequest,
+            ): Boolean = handleResourceLoadingRequest(
+                resourceLoader,
+                shouldWaitForLoadingOfRequestedResource,
+            )
+        }
 
     data class ChunkRequestResult(
         val status: Int,
@@ -147,7 +157,7 @@ class IOSChunkedStreamLoader(
         true
     }
 
-    override fun resourceLoader(
+    fun handleResourceLoadingRequest(
         resourceLoader: platform.AVFoundation.AVAssetResourceLoader,
         shouldWaitForLoadingOfRequestedResource: AVAssetResourceLoadingRequest,
     ): Boolean {
