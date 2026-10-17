@@ -1,0 +1,33 @@
+name: Build BitChord iPadOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    runs-on: macos-15
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install ldid for Sideload Pseudo-Signing
+        run: brew install ldid
+
+      - name: Execute 4-Stage iPadOS .ipa Pipeline
+        run: bash scripts/build_ipados_ipa.sh
+
+      - name: Upload Sideload-Ready .ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BitChord-v1.8-beta1-iPadOS-ipa
+          path: |
+            build/BitChord-v1.8-beta1-iPadOS.ipa
+            build/BitChord-iPadOS-unsigned.ipa

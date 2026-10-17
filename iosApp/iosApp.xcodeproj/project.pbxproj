@@ -1,0 +1,110 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+		1A0000010000000000000001 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000020000000000000001 /* iOSApp.swift */; };
+		1A0000020000000000000001 /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
+		1A0000030000000000000001 /* BitChord.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BitChord.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A0000040000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1A0000050000000000000001 /* iosApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iosApp.entitlements; sourceTree = "<group>"; };
+		1A0000060000000000000001 /* iosApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A0000070000000000000001 /* Build configuration list for PBXNativeTarget "iosApp" */;
+			buildPhases = (
+				1A0000080000000000000001 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = iosApp;
+			productName = BitChord;
+			productReference = 1A0000030000000000000001 /* BitChord.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1A0000080000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1A0000010000000000000001 /* iOSApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1A0000090000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = 1A00000A0000000000000001 /* Build configuration list for PBXProject "iosApp" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			targets = (
+				1A0000060000000000000001 /* iosApp */,
+			);
+		};
+		1A00000B0000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
+				CODE_SIGN_IDENTITY = "";
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				INFOPLIST_FILE = iosApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"-ObjC",
+					"-lsqlite3",
+					"-lz",
+					"-lc++",
+					"-framework",
+					"AVFoundation",
+					"-framework",
+					"AudioToolbox",
+					"-framework",
+					"Accelerate",
+					"-framework",
+					"JavaScriptCore",
+					"-framework",
+					"MediaPlayer",
+					"-framework",
+					"Security",
+					"-framework",
+					"WebKit",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.music.bitchord;
+				PRODUCT_NAME = BitChord;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		1A0000070000000000000001 /* Build configuration list for PBXNativeTarget "iosApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A00000B0000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1A00000A0000000000000001 /* Build configuration list for PBXProject "iosApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A00000B0000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+	};
+	rootObject = 1A0000090000000000000001 /* Project object */;
+}

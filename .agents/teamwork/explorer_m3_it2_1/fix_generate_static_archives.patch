@@ -1,0 +1,132 @@
+--- scripts/generate_static_archives.py
++++ scripts/generate_static_archives.py
+@@ -154,6 +154,16 @@
+ def make_ar_archive(obj_bytes: bytes, obj_name: str = "bitchord_ios_bridge.o") -> bytes:
+-    # AR format:
+-    # !<arch>\n
+-    # Member 1: __.SYMDEF SORTED
+-    # Member 2: obj_name
+-    
+-    # BSD ranlib table:
+-    # 4 bytes: ran_size (number of ranlibs * 8)
+-    # ranlibs: ran_strx (4 bytes), ran_off (4 bytes)
+-    # 4 bytes: str_size
+-    # string table
++    """
++    Constructs a valid BSD static archive (lib*.a) containing:
++      1. Member 1: BSD ranlib symbol table (__.SYMDEF SORTED)
++      2. Member 2: Mach-O ARM64 object file (obj_name)
++      
++    Conforms strictly to 60-byte POSIX/BSD struct ar_hdr:
++      char ar_name[16];
++      char ar_date[12];
++      char ar_uid[6];
++      char ar_gid[6];
++      char ar_mode[8];
++      char ar_size[10];
++      char ar_fmag[2];  # `\n (0x60, 0x0a)
++    """
++    ARFMAG = b"`\n"
+     
+     # We will compute ran_off: the offset of Member 2 header in archive
+@@ -172,30 +182,31 @@
+     ran_size = len(SYMBOLS) * 8
+     str_size = len(ranlib_strs)
+     
+-    # We need to know ran_off before assembling:
+-    # Header of archive: 8 bytes
+-    # Header of Member 1: 60 bytes
+-    # Data of Member 1: 4 + ran_size + 4 + str_size
+-    # If Data of Member 1 is odd, 1 byte pad
+-    symdef_data_unpadded = 4 + ran_size + 4 + str_size
+-    symdef_pad = 1 if (symdef_data_unpadded % 2 != 0) else 0
+-    symdef_data_len = symdef_data_unpadded + symdef_pad
+-    
+-    member2_offset = 8 + 60 + symdef_data_len
++    # Member 1 payload structure:
++    # - BSD #1/20 extended name: "__.SYMDEF SORTED\0\0\0\0" (20 bytes)
++    # - 4 bytes: ran_size (uint32 LE)
++    # - ran_size bytes: array of struct ranlib (uint32 ran_strx, uint32 ran_off)
++    # - 4 bytes: str_size (uint32 LE)
++    # - str_size bytes: string table
++    m1_name_data = b"__.SYMDEF SORTED\x00\x00\x00\x00"  # 20 bytes
++    symdef_body_len = 4 + ran_size + 4 + str_size
++    m1_payload_len = len(m1_name_data) + symdef_body_len
++    m1_pad = b"\n" if (m1_payload_len % 2 != 0) else b""
++
++    # Member 2 header offset from start of archive:
++    # 8 bytes (!<arch>\n) + 60 bytes (m1_header) + m1_payload_len + len(m1_pad)
++    member2_offset = 8 + 60 + m1_payload_len + len(m1_pad)
+     
+     ranlib_data = b""
+     for strx in ranlib_entries:
+         ranlib_data += struct.pack("<II", strx, member2_offset)
+         
+-    symdef_data = struct.pack("<I", ran_size) + ranlib_data + struct.pack("<I", str_size) + ranlib_strs
+-    if symdef_pad:
+-        symdef_data += b"\x00"
+-        
+-    # Member 1 header (BSD ar)
+-    m1_name = "#1/20".ljust(16) # BSD extended name: 20 bytes
+-    m1_name_data = b"__.SYMDEF SORTED\x00\x00\x00\x00" # 20 bytes
+-    # total member 1 data includes extended name
+-    m1_total_data = m1_name_data + symdef_data
+-    m1_total_size = len(m1_total_data)
+-    if m1_total_size % 2 != 0:
+-        m1_total_data += b"\x00"
+-        m1_total_size += 1
++    symdef_data = (
++        struct.pack("<I", ran_size)
++        + ranlib_data
++        + struct.pack("<I", str_size)
++        + ranlib_strs
++    )
++    m1_total_data = m1_name_data + symdef_data + m1_pad
+         
+     m1_header = (
+         f"{'#1/20':<16}"
+@@ -204,24 +215,36 @@
+         f"{'0':<6}"
+         f"{'100644':<8}"
+-        f"{m1_total_size:<10}"
+-        f"`\n"
+-    ).encode("ascii")
++        f"{m1_payload_len:<10}"
++    ).encode("ascii") + ARFMAG
++    assert len(m1_header) == 60, f"Member 1 header must be 60 bytes, got {len(m1_header)}"
+     
+-    # Member 2 header
+-    m2_name_field = f"{obj_name:<16}"
+-    m2_size = len(obj_bytes)
+-    m2_padded_obj = obj_bytes + (b"\x00" if (m2_size % 2 != 0) else b"")
++    # Member 2 header
++    # In BSD ar, filenames longer than 16 characters use BSD #1/<len> extended naming:
++    # ar_name is '#1/<len>' space-padded to 16 bytes, and the filename is prepended
++    # to the member data payload. The ar_size field includes len(name_bytes) + len(obj_bytes).
++    if len(obj_name) > 16 or " " in obj_name:
++        name_bytes = obj_name.encode("ascii")
++        m2_name_field = f"#1/{len(name_bytes)}".ljust(16)
++        m2_payload = name_bytes + obj_bytes
++    else:
++        m2_name_field = obj_name.ljust(16)
++        m2_payload = obj_bytes
++
++    m2_size = len(m2_payload)
++    m2_pad = b"\n" if (m2_size % 2 != 0) else b""
++
+     m2_header = (
+         f"{m2_name_field}"
+         f"{'0':<12}"
+         f"{'0':<6}"
+         f"{'0':<6}"
+         f"{'100644':<8}"
+         f"{m2_size:<10}"
+-        f"`\n"
+-    ).encode("ascii")
++    ).encode("ascii") + ARFMAG
++    assert len(m2_header) == 60, f"Member 2 header must be 60 bytes, got {len(m2_header)}"
+     
+-    return b"!<arch>\n" + m1_header + m1_total_data + m2_header + m2_padded_obj
++    archive = b"!<arch>\n" + m1_header + m1_total_data + m2_header + m2_payload + m2_pad
++    assert archive[member2_offset : member2_offset + 60] == m2_header
++    return archive
