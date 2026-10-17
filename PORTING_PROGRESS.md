@@ -27,10 +27,10 @@
 
 ## Key Deliverable Artifacts
 
-- **Sideload-Ready iPadOS IPA Bundle (Compiled via `macos-15` Xcode Runner, Run `#39007016025`)**:
-  - `D:\Bitchord\build\BitChord-v1.8-beta1-iPadOS.ipa` (`15,780,697` bytes / `15.78 MB` compressed)
-  - `D:\Bitchord\build\BitChord-iPadOS-unsigned.ipa` (`15,780,697` bytes / `15.78 MB` compressed)
-  - Embedded `Payload/BitChord.app/BitChord`: `52,739,776` bytes (`52.74 MB`) 64-bit ARM64 Mach-O executable (`magic=0xFEEDFACF`, `cputype=0x0100000C`)
+- **Sideload-Ready iPadOS IPA Bundle (Compiled via `macos-15` Xcode Runner, Run `#39009670670`)**:
+  - `D:\Bitchord\build\BitChord-v1.8-beta1-iPadOS.ipa` (`18,221,874` bytes / `18.22 MB` compressed)
+  - `D:\Bitchord\build\BitChord-iPadOS-unsigned.ipa` (`18,221,874` bytes / `18.22 MB` compressed)
+  - Embedded `Payload/BitChord.app/BitChord`: `62,218,352` bytes (`62.22 MB`) 64-bit ARM64 Mach-O executable (`magic=0xFEEDFACF`, `cputype=0x0100000C`) with full `BitChordIosApp` UI & playback engine linked
   - GitHub Repository & Releases: `https://github.com/Spvteam/bitchord-ipados`
 - **Native C++17 DSP Static Libraries**:
   - `D:\Bitchord\native\libs\iosArm64\libbitchord_analysis.a` (`129,032` bytes `clang++ -arch arm64 -isysroot iphoneos`)

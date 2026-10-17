@@ -1,6 +1,7 @@
 @file:OptIn(
     kotlinx.cinterop.ExperimentalForeignApi::class,
     androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.ui.ExperimentalComposeUiApi::class,
 )
 
 package com.music.bitchord.ui
@@ -10,6 +11,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,22 +30,36 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Login
+import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
@@ -52,6 +68,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +79,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.interop.UIKitView
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -80,6 +98,7 @@ import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsRepository
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.lyrics.LyricsTranslation
+import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.model.BrowseItem
 import com.music.bitchord.data.model.HomeShelf
 import com.music.bitchord.data.model.LibraryPage
@@ -97,12 +116,15 @@ import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.MixBlend
 import com.music.bitchord.data.settings.SmartAnalysis
 import com.music.bitchord.data.settings.TransitionWindow
+import com.music.bitchord.playback.AudioEngineController
+import com.music.bitchord.playback.DeckId
 import com.music.bitchord.playback.IOSNowPlayingManager
 import com.music.bitchord.playback.PlaybackPosition
 import com.music.bitchord.ui.player.AudioOutputDevice
 import com.music.bitchord.ui.player.AudioOutputKind
 import com.music.bitchord.ui.player.CanvasVideoSpec
 import com.music.bitchord.ui.player.LyricsRomanizationResult
+import com.music.bitchord.ui.player.LyricsShareRequest
 import com.music.bitchord.ui.player.LyricsTranslationResult
 import com.music.bitchord.ui.player.NowPlayingScreen
 import com.music.bitchord.ui.player.OutputFormatUi
@@ -133,12 +155,27 @@ import platform.AVFoundation.currentTime
 import platform.AVFoundation.duration
 import platform.AVFoundation.pause
 import platform.AVFoundation.play
+import platform.AVFoundation.rate
 import platform.AVFoundation.replaceCurrentItemWithPlayerItem
 import platform.AVFoundation.seekToTime
 import platform.AVFoundation.volume
+import platform.CoreGraphics.CGRectMake
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMakeWithSeconds
+import platform.Foundation.NSHTTPCookie
 import platform.Foundation.NSURL
+import platform.Foundation.NSURLRequest
+import platform.WebKit.WKWebView
+import platform.WebKit.WKWebViewConfiguration
+import platform.WebKit.WKWebsiteDataStore
+
+private const val YOUTUBE_SIGN_IN_URL =
+    "https://accounts.google.com/ServiceLogin?ltmpl=music&service=youtube&passive=true" +
+        "&continue=https%3A%2F%2Fmusic.youtube.com%2F"
+
+private const val SAFARI_IPAD_USER_AGENT =
+    "Mozilla/5.0 (iPad; CPU OS 18_3 like Mac OS X) AppleWebKit/605.1.15 " +
+        "(KHTML, like Gecko) Version/18.3 Mobile/15E148 Safari/604.1"
 
 internal object IOSAppUiHost : AppUiHost {
     override val swipeToPlayNext: StateFlow<Boolean> = MutableStateFlow(true)
@@ -150,7 +187,8 @@ internal object IOSAppUiHost : AppUiHost {
     }
 
     override val pinnedPlaylists: StateFlow<List<String>> = MutableStateFlow(emptyList())
-    override val librarySort: StateFlow<LibrarySort> = MutableStateFlow(LibrarySort.DEFAULT)
+    private val _librarySort = MutableStateFlow(LibrarySort.DEFAULT)
+    override val librarySort: StateFlow<LibrarySort> = _librarySort
 
     @Composable
     override fun downloadedIds(): Set<String> = emptySet()
@@ -229,7 +267,7 @@ internal object IOSPlayerHost : PlayerHost {
     override fun rememberAudioOutputs(): List<AudioOutputDevice> = listOf(
         AudioOutputDevice(
             id = 1,
-            name = "iPad Speakers / AirPods",
+            name = "iPad Speakers / AirPods (CoreAudio)",
             kind = AudioOutputKind.PHONE,
             isActive = true,
         )
@@ -273,14 +311,157 @@ internal object IOSPlayerHost : PlayerHost {
 
     override fun showMessage(message: String) = Unit
 
+    override val lyricsShareAvailable: Boolean
+        get() = true
+
     @Composable
-    override fun AudioPipelineDialog(hazeState: HazeState, isPlaying: Boolean, onDismiss: () -> Unit) = Unit
+    override fun LyricsShareSheet(
+        hazeState: HazeState,
+        request: LyricsShareRequest,
+        onDismiss: () -> Unit,
+    ) {
+        val pickedLines = request.lines.filter { !it.isGap && it.text.isNotBlank() }.map { it.text }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.72f))
+                .clickable { onDismiss() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(420.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color(0xFF16192B))
+                    .clickable(enabled = false) {}
+                    .padding(24.dp),
+            ) {
+                Text(
+                    text = "Share Lyrics Card (9:16)",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "${request.song.title} · ${request.song.artist}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFA6AABF),
+                )
+                Spacer(Modifier.height(16.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF1F243D))
+                        .padding(16.dp),
+                ) {
+                    pickedLines.forEach { line ->
+                        Text(
+                            text = line,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            modifier = Modifier.padding(vertical = 4.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Cancel", color = Color.White)
+                    }
+                    Button(
+                        onClick = {
+                            val card = ShareSheet.renderLyricsStoryCardPng(
+                                trackTitle = request.song.title,
+                                artistName = request.song.artist,
+                                selectedLines = pickedLines,
+                            )
+                            val shareText = buildString {
+                                appendLine("\"${pickedLines.joinToString("\n")}\"")
+                                append("— ${request.song.title} by ${request.song.artist}")
+                            }
+                            ShareSheet.presentShareSheet(listOf(shareText, card.pngBytes))
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B5C)),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Rounded.IosShare, contentDescription = null, tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Share", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    override fun AudioPipelineDialog(
+        hazeState: HazeState,
+        isPlaying: Boolean,
+        onDismiss: () -> Unit,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.70f))
+                .clickable { onDismiss() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(420.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color(0xFF151828))
+                    .clickable(enabled = false) {}
+                    .padding(24.dp),
+            ) {
+                Text(
+                    text = "Audio Signal Pipeline",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+                Spacer(Modifier.height(14.dp))
+                PipelineStageRow("Source Stream", "YouTube Music AAC-LC 256 kbps (itag 141/140)")
+                PipelineStageRow("Hardware Decoder", "Apple AudioToolbox / AVFoundation 32-bit Float")
+                PipelineStageRow("DSP Engine", "C++17 libbitchord_analysis + 10-Band Biquad EQ")
+                PipelineStageRow("Crossfade Deck", "Dual-Deck Equal-Power (${IOSPlaybackController.crossfadeSeconds.toInt()}s)")
+                PipelineStageRow("Output Route", "iPadOS CoreAudio · 44.1 kHz Stereo (AirPlay 2 / A2DP)")
+                Spacer(Modifier.height(18.dp))
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Close", color = Color.Black, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PipelineStageRow(label: String, value: String) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(text = label, style = MaterialTheme.typography.labelMedium, color = Color(0xFFA6AABF))
+        Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
+    }
 }
 
 internal object IOSPlaybackController {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val avPlayer = AVPlayer()
     val audioEngine = IOSAudioEngine()
+    val keychain = IOSKeychainAuthStore()
     val nowPlayingManager = IOSNowPlayingManager(
         onPlay = { resume() },
         onPause = { pause() },
@@ -318,6 +499,22 @@ internal object IOSPlaybackController {
     var lyricsUnavailable by mutableStateOf(false)
         private set
 
+    // Account state
+    var signedIn by mutableStateOf(false)
+        private set
+    var account by mutableStateOf<Account?>(null)
+        private set
+
+    // Audio DSP settings state
+    var activeEqPreset by mutableStateOf("Flat")
+        private set
+    var eqBands by mutableStateOf(audioEngine.getEqualizerBands().toList())
+        private set
+    var crossfadeSeconds by mutableFloatStateOf(4.0f)
+        private set
+    var playbackSpeed by mutableFloatStateOf(1.0f)
+        private set
+
     private var playJob: Job? = null
     private var lyricsJob: Job? = null
     private var initialized = false
@@ -329,10 +526,11 @@ internal object IOSPlaybackController {
         PlayerPlatform.install(IOSPlayerHost)
 
         try {
-            val keychain = IOSKeychainAuthStore()
             val savedCookie = keychain.getSecret("INNERTUBE_COOKIE")
             if (!savedCookie.isNullOrBlank()) {
                 Innertube.cookie = savedCookie
+                signedIn = true
+                refreshAccountProfile()
             }
             IOSSandboxStorage.resolveApplicationSupportDirectory()
             InnerTubeXResolver.init(poTokenProvider = IOSPoTokenProvider.shared)
@@ -362,6 +560,73 @@ internal object IOSPlaybackController {
                     }
                 }
             }
+        }
+    }
+
+    fun applyYouTubeCookie(cookieHeader: String, onCompleted: () -> Unit = {}) {
+        val cleaned = cookieHeader.trim()
+        if (cleaned.isEmpty()) return
+        try {
+            keychain.putSecret("INNERTUBE_COOKIE", cleaned)
+        } catch (_: Throwable) {
+        }
+        Innertube.cookie = cleaned
+        signedIn = true
+        InnerTubeXResolver.onSessionChanged()
+        refreshAccountProfile()
+        onCompleted()
+    }
+
+    fun signOut(onCompleted: () -> Unit = {}) {
+        try {
+            keychain.deleteSecret("INNERTUBE_COOKIE")
+        } catch (_: Throwable) {
+        }
+        Innertube.cookie = null
+        signedIn = false
+        account = null
+        LikeState.clear()
+        InnerTubeXResolver.onSessionChanged()
+        onCompleted()
+    }
+
+    fun refreshAccountProfile() {
+        scope.launch {
+            val fetched = withContext(Dispatchers.Default) {
+                YtMusicRepository.account().getOrNull()
+            }
+            if (fetched != null) {
+                account = fetched
+            }
+        }
+    }
+
+    fun selectEqualizerPreset(presetName: String) {
+        if (audioEngine.applyEqualizerPreset(presetName)) {
+            activeEqPreset = presetName
+            eqBands = audioEngine.getEqualizerBands().toList()
+        }
+    }
+
+    fun updateEqBand(index: Int, gainDb: Float) {
+        val current = audioEngine.getEqualizerBands()
+        if (index !in current.indices) return
+        current[index] = gainDb.coerceIn(-12f, 12f)
+        audioEngine.setEqualizer(current)
+        activeEqPreset = "Custom"
+        eqBands = current.toList()
+    }
+
+    fun updateCrossfade(seconds: Float) {
+        crossfadeSeconds = seconds.coerceIn(0f, 12f)
+    }
+
+    fun updatePlaybackSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.5f, 2.0f)
+        playbackSpeed = clamped
+        audioEngine.setDeckPitchAndRate(DeckId.A, clamped, 0f)
+        if (isPlaying) {
+            avPlayer.rate = clamped
         }
     }
 
@@ -413,6 +678,9 @@ internal object IOSPlaybackController {
                     val item = AVPlayerItem.playerItemWithURL(nsUrl)
                     avPlayer.replaceCurrentItemWithPlayerItem(item)
                     avPlayer.play()
+                    if (playbackSpeed != 1.0f) {
+                        avPlayer.rate = playbackSpeed
+                    }
                     isPlaying = true
                 }
             }
@@ -423,20 +691,24 @@ internal object IOSPlaybackController {
                 albumTitle = song.albumName ?: "",
                 durationSeconds = (durationMs / 1000L).toDouble().coerceAtLeast(1.0),
                 elapsedSeconds = 0.0,
-                playbackRate = if (isPlaying) 1.0 else 0.0,
+                playbackRate = if (isPlaying) playbackSpeed.toDouble() else 0.0,
             )
         }
     }
 
-    private fun fetchLyricsFor(song: Song) {
+    private fun fetchLyricsFor(song: Song, preferredSource: LyricsSource? = null) {
         lyricsJob?.cancel()
         lyrics = null
         lyricsSource = null
         lyricsUnavailable = false
-        lyricsProviderStates = LyricsSource.entries.associateWith { LyricsProviderState.NOT_FETCHED }
+        lyricsProviderStates = LyricsSource.entries.associateWith {
+            if (it == preferredSource) LyricsProviderState.FETCHING else LyricsProviderState.NOT_FETCHED
+        }
 
         lyricsJob = scope.launch {
             val dur = if (durationMs > 0L) durationMs else 180_000L
+            val sourcesToTry = if (preferredSource != null) setOf(preferredSource) else LyricsSource.entries.toSet()
+            val orderToTry = if (preferredSource != null) listOf(preferredSource) else LyricsSource.entries
             val res = withContext(Dispatchers.Default) {
                 try {
                     LyricsRepository.lyrics(
@@ -445,6 +717,8 @@ internal object IOSPlaybackController {
                         artist = song.artist,
                         durationMs = dur,
                         album = song.albumName,
+                        sources = sourcesToTry,
+                        order = orderToTry,
                     )
                 } catch (_: Throwable) {
                     null
@@ -454,10 +728,19 @@ internal object IOSPlaybackController {
                 lyrics = res.lines
                 lyricsSource = res.source
                 lyricsUnavailable = false
+                lyricsProviderStates = lyricsProviderStates + (res.source to LyricsProviderState.FOUND)
             } else {
                 lyricsUnavailable = true
+                if (preferredSource != null) {
+                    lyricsProviderStates = lyricsProviderStates + (preferredSource to LyricsProviderState.NOT_FOUND)
+                }
             }
         }
+    }
+
+    fun selectLyricsProvider(source: LyricsSource) {
+        val s = currentSong ?: return
+        fetchLyricsFor(s, preferredSource = source)
     }
 
     fun togglePlayPause() {
@@ -480,6 +763,9 @@ internal object IOSPlaybackController {
 
     fun resume() {
         avPlayer.play()
+        if (playbackSpeed != 1.0f) {
+            avPlayer.rate = playbackSpeed
+        }
         isPlaying = true
         val s = currentSong ?: return
         nowPlayingManager.updateNowPlayingMetadata(
@@ -488,7 +774,7 @@ internal object IOSPlaybackController {
             albumTitle = s.albumName ?: "",
             durationSeconds = (durationMs / 1000L).toDouble(),
             elapsedSeconds = (position.positionMs / 1000L).toDouble(),
-            playbackRate = 1.0,
+            playbackRate = playbackSpeed.toDouble(),
         )
     }
 
@@ -609,6 +895,7 @@ private enum class IosTab(val label: String) {
     EXPLORE("Explore"),
     LIBRARY("Library"),
     SEARCH("Search"),
+    SETTINGS("Settings & EQ"),
 }
 
 private val BitChordDarkColors = darkColorScheme(
@@ -632,6 +919,7 @@ fun BitChordIosApp() {
     val scope = rememberCoroutineScope()
     var activeTab by remember { mutableStateOf(IosTab.HOME) }
     var playerExpanded by remember { mutableStateOf(false) }
+    var showSignInModal by remember { mutableStateOf(false) }
 
     // Home state
     var homeState by remember { mutableStateOf<UiState<List<HomeShelf>>>(UiState.Loading) }
@@ -762,6 +1050,9 @@ fun BitChordIosApp() {
     LaunchedEffect(Unit) {
         loadHome()
         loadExplore()
+        if (IOSPlaybackController.signedIn) {
+            loadLibrary()
+        }
     }
 
     LaunchedEffect(searchQuery) {
@@ -794,19 +1085,23 @@ fun BitChordIosApp() {
                 val isWideIpad = layoutMode != StageManagerLayoutMode.COMPACT
                 val currentSong = IOSPlaybackController.currentSong
                 val isPlaying = IOSPlaybackController.isPlaying
-                val signedIn = Innertube.cookie != null
+                val signedIn = IOSPlaybackController.signedIn
+                val account = IOSPlaybackController.account
 
                 Row(modifier = Modifier.fillMaxSize()) {
                     if (isWideIpad) {
                         IpadSidebar(
                             activeTab = activeTab,
+                            signedIn = signedIn,
+                            account = account,
                             onSelectTab = { tab ->
                                 activeTab = tab
                                 activeBrowseTitle = null
-                                if (tab == IosTab.LIBRARY && libraryState is UiState.Loading) {
+                                if (tab == IosTab.LIBRARY && signedIn && libraryState is UiState.Loading) {
                                     loadLibrary()
                                 }
                             },
+                            onSignInClick = { showSignInModal = true },
                         )
                     }
 
@@ -842,7 +1137,7 @@ fun BitChordIosApp() {
                                     contentPadding = pagePadding,
                                     title = "Listen Now",
                                     signedIn = signedIn,
-                                    onSignIn = null,
+                                    onSignIn = { showSignInModal = true },
                                     onLoadMore = homeContinuation?.let { token ->
                                         {
                                             if (!homeLoadingMore) {
@@ -900,7 +1195,7 @@ fun BitChordIosApp() {
 
                             IosTab.LIBRARY -> {
                                 LibraryScreen(
-                                    signedIn = true,
+                                    signedIn = signedIn,
                                     state = libraryState,
                                     listState = libraryListState,
                                     onShelfItemClick = { item ->
@@ -938,7 +1233,7 @@ fun BitChordIosApp() {
                                         }
                                     },
                                     replay = {},
-                                    onSignIn = { loadLibrary() },
+                                    onSignIn = { showSignInModal = true },
                                     onRetry = { loadLibrary() },
                                     refreshing = libraryRefreshing,
                                     onRefresh = { loadLibrary(isRefresh = true) },
@@ -1018,6 +1313,21 @@ fun BitChordIosApp() {
                                     showField = true,
                                 )
                             }
+
+                            IosTab.SETTINGS -> {
+                                SettingsAndEqualizerScreen(
+                                    signedIn = signedIn,
+                                    account = account,
+                                    onOpenSignIn = { showSignInModal = true },
+                                    onSignOut = {
+                                        IOSPlaybackController.signOut {
+                                            loadHome(isRefresh = true)
+                                            libraryState = UiState.Loading
+                                        }
+                                    },
+                                    bottomPadding = bottomInset,
+                                )
+                            }
                         }
 
                         // Browse collection detail overlay
@@ -1060,6 +1370,9 @@ fun BitChordIosApp() {
                                     onSelectTab = { tab ->
                                         activeTab = tab
                                         activeBrowseTitle = null
+                                        if (tab == IosTab.LIBRARY && signedIn && libraryState is UiState.Loading) {
+                                            loadLibrary()
+                                        }
                                     },
                                 )
                             }
@@ -1096,7 +1409,7 @@ fun BitChordIosApp() {
                                 shuffleEnabled = IOSPlaybackController.shuffleEnabled,
                                 autoplayEnabled = IOSPlaybackController.autoplayEnabled,
                                 signedIn = signedIn,
-                                accountName = null,
+                                accountName = account?.name,
                                 likeStatus = likeStatus,
                                 onToggleLike = {
                                     val nextStatus = if (likeStatus == LikeStatus.LIKE) LikeStatus.INDIFFERENT else LikeStatus.LIKE
@@ -1131,7 +1444,9 @@ fun BitChordIosApp() {
                                 lyrics = IOSPlaybackController.lyrics,
                                 lyricsSource = IOSPlaybackController.lyricsSource,
                                 lyricsProviderStates = IOSPlaybackController.lyricsProviderStates,
-                                onSelectLyricsProvider = {},
+                                onSelectLyricsProvider = { src ->
+                                    IOSPlaybackController.selectLyricsProvider(src)
+                                },
                                 lyricsUnavailable = IOSPlaybackController.lyricsUnavailable,
                                 lyricsOffsetOpen = lyricsOffsetOpen,
                                 onDismissLyricsOffset = { lyricsOffsetOpen = false },
@@ -1158,6 +1473,387 @@ fun BitChordIosApp() {
                         }
                     }
                 }
+
+                // Full-screen YouTube Music WKWebView Sign-In Modal
+                if (showSignInModal) {
+                    YouTubeSignInModal(
+                        onDismiss = { showSignInModal = false },
+                        onSignedIn = { cookieHeader ->
+                            IOSPlaybackController.applyYouTubeCookie(cookieHeader) {
+                                showSignInModal = false
+                                loadHome(isRefresh = true)
+                                loadLibrary(isRefresh = true)
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun YouTubeSignInModal(
+    onDismiss: () -> Unit,
+    onSignedIn: (String) -> Unit,
+) {
+    var manualCookieMode by remember { mutableStateOf(false) }
+    var manualCookieText by remember { mutableStateOf("") }
+    var detectedCookie by remember { mutableStateOf<String?>(null) }
+    var statusText by remember { mutableStateOf("Sign in with your Google Account below") }
+
+    LaunchedEffect(manualCookieMode) {
+        if (manualCookieMode) return@LaunchedEffect
+        while (true) {
+            delay(1200L)
+            WKWebsiteDataStore.defaultDataStore().httpCookieStore.getAllCookies { rawList ->
+                val cookies = rawList?.filterIsInstance<NSHTTPCookie>().orEmpty()
+                val ytCookies = cookies.filter { c ->
+                    val dom = c.domain.lowercase()
+                    dom.contains("youtube.com") || dom.contains("google.com")
+                }
+                val hasSapisid = ytCookies.any { c ->
+                    c.name == "SAPISID" || c.name == "__Secure-3PAPISID"
+                }
+                if (hasSapisid) {
+                    val header = ytCookies.joinToString("; ") { c -> "${c.name}=${c.value}" }
+                    detectedCookie = header
+                    statusText = "Account session ready! Tap 'Use this profile' to finish."
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0A0B10))
+            .statusBarsPadding(),
+    ) {
+        // Top Header Bar
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF141622))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.White)
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text(
+                    text = "Sign in to YouTube Music",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (detectedCookie != null) Color(0xFF4CD964) else Color(0xFFA6AABF),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { manualCookieMode = !manualCookieMode },
+                ) {
+                    Text(if (manualCookieMode) "Web Login" else "Paste Cookie", color = Color.White)
+                }
+
+                Button(
+                    onClick = {
+                        if (manualCookieMode) {
+                            if (manualCookieText.isNotBlank()) {
+                                onSignedIn(manualCookieText)
+                            }
+                        } else {
+                            val ready = detectedCookie
+                            if (!ready.isNullOrBlank()) {
+                                onSignedIn(ready)
+                            } else {
+                                WKWebsiteDataStore.defaultDataStore().httpCookieStore.getAllCookies { rawList ->
+                                    val cookies = rawList?.filterIsInstance<NSHTTPCookie>().orEmpty()
+                                    val ytCookies = cookies.filter { c ->
+                                        val dom = c.domain.lowercase()
+                                        dom.contains("youtube.com") || dom.contains("google.com")
+                                    }
+                                    if (ytCookies.isNotEmpty()) {
+                                        val header = ytCookies.joinToString("; ") { c -> "${c.name}=${c.value}" }
+                                        onSignedIn(header)
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (detectedCookie != null || manualCookieText.isNotBlank()) Color(0xFF4CD964) else Color(0xFFFF3B5C),
+                    ),
+                ) {
+                    Text("Use this profile", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        if (manualCookieMode) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+            ) {
+                Text(
+                    text = "Paste YouTube Music Cookie Header",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Paste your Cookie string from music.youtube.com (containing SAPISID / __Secure-3PAPISID) to sign in directly:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFA6AABF),
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = manualCookieText,
+                    onValueChange = { manualCookieText = it },
+                    placeholder = { Text("SAPISID=...; __Secure-3PAPISID=...; SID=...", color = Color(0xFF6E738A)) },
+                    modifier = Modifier.fillMaxWidth().height(180.dp),
+                )
+            }
+        } else {
+            UIKitView(
+                factory = {
+                    val config = WKWebViewConfiguration()
+                    config.websiteDataStore = WKWebsiteDataStore.defaultDataStore()
+                    val webView = WKWebView(
+                        frame = CGRectMake(0.0, 0.0, 1024.0, 768.0),
+                        configuration = config,
+                    )
+                    webView.customUserAgent = SAFARI_IPAD_USER_AGENT
+                    val nsUrl = NSURL.URLWithString(YOUTUBE_SIGN_IN_URL)
+                    if (nsUrl != null) {
+                        webView.loadRequest(NSURLRequest.requestWithURL(nsUrl))
+                    }
+                    webView
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsAndEqualizerScreen(
+    signedIn: Boolean,
+    account: Account?,
+    onOpenSignIn: () -> Unit,
+    onSignOut: () -> Unit,
+    bottomPadding: androidx.compose.ui.unit.Dp,
+) {
+    val scrollState = rememberScrollState()
+    val eqBands = IOSPlaybackController.eqBands
+    val activePreset = IOSPlaybackController.activeEqPreset
+    val crossfadeSec = IOSPlaybackController.crossfadeSeconds
+    val playbackSpeed = IOSPlaybackController.playbackSpeed
+    val freqLabels = listOf("31Hz", "62Hz", "125Hz", "250Hz", "500Hz", "1kHz", "2kHz", "4kHz", "8kHz", "16kHz")
+    val presets = listOf("Flat", "Bass Boost", "Vocal", "Electronic", "Acoustic")
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(top = 28.dp, start = 28.dp, end = 28.dp, bottom = bottomPadding + 24.dp),
+    ) {
+        Text(
+            text = "Settings & Audio DSP",
+            style = MaterialTheme.typography.displaySmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+        )
+        Spacer(Modifier.height(20.dp))
+
+        // Account Card
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF161928))
+                .padding(20.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (account?.thumbnailUrl != null) {
+                    AsyncImage(
+                        model = account.thumbnailUrl,
+                        contentDescription = account.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(54.dp).clip(CircleShape),
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.AccountCircle,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(54.dp),
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (signedIn) (account?.name ?: "YouTube Music Account Connected") else "Guest Session (Not Signed In)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Text(
+                        text = if (signedIn) (account?.email ?: "Synced with iOS Keychain (SAPISIDHASH)") else "Sign in to sync your Liked Music, Playlists, and History",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFA6AABF),
+                    )
+                }
+                if (signedIn) {
+                    OutlinedButton(onClick = onSignOut) {
+                        Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = null, tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Sign Out", color = Color.White)
+                    }
+                } else {
+                    Button(
+                        onClick = onOpenSignIn,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B5C)),
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.Login, contentDescription = null, tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Sign in to YouTube Music", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        // Crossfade & Tempo / Speed Card
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF161928))
+                .padding(20.dp),
+        ) {
+            Text(
+                text = "Dual-Deck Crossfade & Tempo",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Equal-Power Crossfade Duration: ${crossfadeSec.toInt()}s",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFA6AABF),
+            )
+            Slider(
+                value = crossfadeSec,
+                onValueChange = { IOSPlaybackController.updateCrossfade(it) },
+                valueRange = 0f..12f,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Playback Speed (AVAudioUnitTimePitch): ${((playbackSpeed * 100).toInt() / 100.0)}x",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFA6AABF),
+            )
+            Slider(
+                value = playbackSpeed,
+                onValueChange = { IOSPlaybackController.updatePlaybackSpeed(it) },
+                valueRange = 0.5f..2.0f,
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        // 10-Band Parametric Equalizer Card
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF161928))
+                .padding(20.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "10-Band Biquad Equalizer ($activePreset)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+
+            // Preset chips
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            ) {
+                presets.forEach { preset ->
+                    val isSelected = activePreset == preset
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) Color(0xFFFF3B5C) else Color(0xFF22263A))
+                            .clickable { IOSPlaybackController.selectEqualizerPreset(preset) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            text = preset,
+                            color = Color.White,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            Spacer(Modifier.height(12.dp))
+
+            freqLabels.forEachIndexed { idx, freq ->
+                val gain = eqBands.getOrElse(idx) { 0f }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                ) {
+                    Text(
+                        text = freq,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFA6AABF),
+                        modifier = Modifier.width(56.dp),
+                    )
+                    Slider(
+                        value = gain,
+                        onValueChange = { IOSPlaybackController.updateEqBand(idx, it) },
+                        valueRange = -12f..12f,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "${if (gain >= 0f) "+" else ""}${gain.toInt()} dB",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White,
+                        modifier = Modifier.width(56.dp),
+                    )
+                }
             }
         }
     }
@@ -1166,11 +1862,14 @@ fun BitChordIosApp() {
 @Composable
 private fun IpadSidebar(
     activeTab: IosTab,
+    signedIn: Boolean,
+    account: Account?,
     onSelectTab: (IosTab) -> Unit,
+    onSignInClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
-            .width(230.dp)
+            .width(240.dp)
             .fillMaxHeight()
             .background(Color(0xFF10121C))
             .statusBarsPadding()
@@ -1183,7 +1882,7 @@ private fun IpadSidebar(
             color = Color.White,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
 
         IosTab.entries.forEach { tab ->
             val selected = tab == activeTab
@@ -1192,6 +1891,7 @@ private fun IpadSidebar(
                 IosTab.EXPLORE -> Icons.Rounded.Explore
                 IosTab.LIBRARY -> Icons.Rounded.LibraryMusic
                 IosTab.SEARCH -> Icons.Rounded.Search
+                IosTab.SETTINGS -> Icons.Rounded.Equalizer
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1218,6 +1918,46 @@ private fun IpadSidebar(
             }
             Spacer(Modifier.height(6.dp))
         }
+
+        Spacer(Modifier.weight(1f))
+
+        // Sidebar Account / Sign-In Pill
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (signedIn) Color(0xFF1A1E30) else Color(0xFFFF3B5C).copy(alpha = 0.18f))
+                .clickable {
+                    if (signedIn) onSelectTab(IosTab.SETTINGS) else onSignInClick()
+                }
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+        ) {
+            Icon(
+                imageVector = if (signedIn) Icons.Rounded.AccountCircle else Icons.AutoMirrored.Rounded.Login,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (signedIn) (account?.name ?: "Signed In") else "Sign In",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = if (signedIn) "YouTube Music" else "Connect Google Account",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFA6AABF),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
@@ -1242,13 +1982,14 @@ private fun CompactBottomTabBar(
                 IosTab.EXPLORE -> Icons.Rounded.Explore
                 IosTab.LIBRARY -> Icons.Rounded.LibraryMusic
                 IosTab.SEARCH -> Icons.Rounded.Search
+                IosTab.SETTINGS -> Icons.Rounded.Settings
             }
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
                     .clickable { onSelectTab(tab) }
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
                 Icon(
                     imageVector = icon,
