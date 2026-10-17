@@ -113,14 +113,26 @@ object BitChordComposeHost {
      * with Metal 120Hz ProMotion and full edge-to-edge safe-area handling.
      */
     fun createRootViewController(): UIViewController {
-        IOSPlaybackController.installPlatformHosts()
-        return ComposeUIViewController(
-            configure = {
-                opaque = IS_OPAQUE
-                enforceStrictPlistSanityCheck = false
+        return try {
+            IOSPlaybackController.installPlatformHosts()
+            ComposeUIViewController(
+                configure = {
+                    opaque = IS_OPAQUE
+                    enforceStrictPlistSanityCheck = false
+                }
+            ) {
+                BitChordIosApp()
             }
-        ) {
-            BitChordIosApp()
+        } catch (t: Throwable) {
+            val errVc = UIViewController()
+            val label = platform.UIKit.UILabel()
+            label.text = "BitChord Launch Error:\n${t.message}\n${t.stackTraceToString().take(300)}"
+            label.numberOfLines = 0
+            label.textColor = platform.UIKit.UIColor.whiteColor
+            label.backgroundColor = platform.UIKit.UIColor.blackColor
+            label.textAlignment = platform.UIKit.NSTextAlignmentCenter
+            errVc.view = label
+            errVc
         }
     }
 }

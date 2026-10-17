@@ -600,18 +600,44 @@ object Innertube {
     }
 
     suspend fun search(query: String, params: String? = null): JsonObject =
-        postMusic("search") {
-            put("query", query)
-            params?.let { put("params", it) }
+        try {
+            postMusic("search") {
+                put("query", query)
+                params?.let { put("params", it) }
+            }
+        } catch (e: Throwable) {
+            val msg = e.message.orEmpty()
+            if (msg.contains("401") || msg.contains("403") || msg.contains("Unauthorized", ignoreCase = true)) {
+                Log.w(TAG, "Search rejected with auth error ($msg); falling back to unauthenticated search")
+                postMusicAnonymous("search") {
+                    put("query", query)
+                    params?.let { put("params", it) }
+                }
+            } else {
+                throw e
+            }
         }
 
     /** The next page of a filtered search result. */
-    suspend fun searchContinuation(token: String): JsonObject = postMusic(
-        endpoint = "search",
-        query = mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
-    ) {
-        put("continuation", token)
-    }
+    suspend fun searchContinuation(token: String): JsonObject =
+        try {
+            postMusic(
+                endpoint = "search",
+                query = mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
+            ) {
+                put("continuation", token)
+            }
+        } catch (e: Throwable) {
+            val msg = e.message.orEmpty()
+            if (msg.contains("401") || msg.contains("403") || msg.contains("Unauthorized", ignoreCase = true)) {
+                Log.w(TAG, "Search continuation rejected with auth error ($msg); falling back to unauthenticated search")
+                postMusicAnonymous("search") {
+                    put("continuation", token)
+                }
+            } else {
+                throw e
+            }
+        }
 
     /**
      * The typeahead list YouTube Music's own search box shows for a
