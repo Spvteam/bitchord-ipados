@@ -510,10 +510,30 @@ object Innertube {
 
     // ---- Public API ---------------------------------------------------------
 
+    private fun Throwable.isAuthFailure(): Boolean {
+        val msg = message.orEmpty()
+        return msg.contains("401") ||
+            msg.contains("403") ||
+            msg.contains("Unauthorized", ignoreCase = true) ||
+            msg.contains("UNAUTHENTICATED", ignoreCase = true)
+    }
+
     suspend fun browse(browseId: String, params: String? = null): JsonObject =
-        postMusic("browse") {
-            put("browseId", browseId)
-            params?.let { put("params", it) }
+        try {
+            postMusic("browse") {
+                put("browseId", browseId)
+                params?.let { put("params", it) }
+            }
+        } catch (e: Throwable) {
+            if (e.isAuthFailure()) {
+                Log.w(TAG, "Browse($browseId) rejected with auth error (${e.message}); falling back to unauthenticated browse")
+                postMusicAnonymous("browse") {
+                    put("browseId", browseId)
+                    params?.let { put("params", it) }
+                }
+            } else {
+                throw e
+            }
         }
 
     /**
@@ -522,14 +542,29 @@ object Innertube {
      * query parameters rather than in the body, and answers with a bare
      * continuation envelope carrying the same row renderers.
      */
-    suspend fun browseContinuation(token: String): JsonObject = postMusic(
-        endpoint = "browse",
-        // The web client passes the token in the body and the older query-string
-        // form is still honoured; both are sent so either is enough.
-        query = mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
-    ) {
-        put("continuation", token)
-    }
+    suspend fun browseContinuation(token: String): JsonObject =
+        try {
+            postMusic(
+                endpoint = "browse",
+                // The web client passes the token in the body and the older query-string
+                // form is still honoured; both are sent so either is enough.
+                query = mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
+            ) {
+                put("continuation", token)
+            }
+        } catch (e: Throwable) {
+            if (e.isAuthFailure()) {
+                Log.w(TAG, "Browse continuation rejected with auth error (${e.message}); falling back to unauthenticated browse")
+                postMusicAnonymous(
+                    endpoint = "browse",
+                    query = mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
+                ) {
+                    put("continuation", token)
+                }
+            } else {
+                throw e
+            }
+        }
 
     /** Signed-in profile: display name, email/handle and avatar. */
     suspend fun accountMenu(): JsonObject = postMusic("account/account_menu") {}
@@ -584,11 +619,25 @@ object Innertube {
      * The watch queue that YouTube Music would play after [videoId] — the
      * "RDAMVM" radio mix. Used to keep AutoPlay going past the last track.
      */
-    suspend fun next(videoId: String): JsonObject = postMusic("next") {
-        put("videoId", videoId)
-        put("playlistId", "RDAMVM$videoId")
-        put("isAudioOnly", true)
-    }
+    suspend fun next(videoId: String): JsonObject =
+        try {
+            postMusic("next") {
+                put("videoId", videoId)
+                put("playlistId", "RDAMVM$videoId")
+                put("isAudioOnly", true)
+            }
+        } catch (e: Throwable) {
+            if (e.isAuthFailure()) {
+                Log.w(TAG, "Next($videoId) rejected with auth error (${e.message}); falling back to unauthenticated next")
+                postMusicAnonymous("next") {
+                    put("videoId", videoId)
+                    put("playlistId", "RDAMVM$videoId")
+                    put("isAudioOnly", true)
+                }
+            } else {
+                throw e
+            }
+        }
 
     /** Timed caption transcript used as a last-resort lyrics source. */
     @OptIn(ExperimentalEncodingApi::class)
@@ -606,9 +655,8 @@ object Innertube {
                 params?.let { put("params", it) }
             }
         } catch (e: Throwable) {
-            val msg = e.message.orEmpty()
-            if (msg.contains("401") || msg.contains("403") || msg.contains("Unauthorized", ignoreCase = true)) {
-                Log.w(TAG, "Search rejected with auth error ($msg); falling back to unauthenticated search")
+            if (e.isAuthFailure()) {
+                Log.w(TAG, "Search rejected with auth error (${e.message}); falling back to unauthenticated search")
                 postMusicAnonymous("search") {
                     put("query", query)
                     params?.let { put("params", it) }
@@ -628,10 +676,12 @@ object Innertube {
                 put("continuation", token)
             }
         } catch (e: Throwable) {
-            val msg = e.message.orEmpty()
-            if (msg.contains("401") || msg.contains("403") || msg.contains("Unauthorized", ignoreCase = true)) {
-                Log.w(TAG, "Search continuation rejected with auth error ($msg); falling back to unauthenticated search")
-                postMusicAnonymous("search") {
+            if (e.isAuthFailure()) {
+                Log.w(TAG, "Search continuation rejected with auth error (${e.message}); falling back to unauthenticated search")
+                postMusicAnonymous(
+                    endpoint = "search",
+                    query = mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
+                ) {
                     put("continuation", token)
                 }
             } else {
@@ -1183,20 +1233,22 @@ object Innertube {
      */
     private suspend fun postMusicAnonymous(
         endpoint: String,
+        query: Map<String, String> = emptyMap(),
         bodyExtras: JsonObjectBuilder.() -> Unit,
     ): JsonObject {
         val clientVersion = webRemixVersion
-        return withRetry {
+        val response = withRetry {
             client.post("$MUSIC_BASE/$endpoint") {
                 contentType(ContentType.Application.Json)
                 parameter("prettyPrint", "false")
+                parameter("hl", currentLanguage)
+                header("Accept-Language", acceptLanguageHeader)
+                query.forEach { (key, value) -> parameter(key, value) }
                 header("X-Origin", MUSIC_ORIGIN)
                 header("Origin", MUSIC_ORIGIN)
                 header("Referer", "$MUSIC_ORIGIN/")
                 header("X-YouTube-Client-Name", WEB_REMIX_CLIENT_ID)
                 header("X-YouTube-Client-Version", clientVersion)
-                header("Accept-Language", acceptLanguageHeader)
-                parameter("hl", currentLanguage)
                 visitorData?.let { header("X-Goog-Visitor-Id", it) }
                 // No Cookie / Authorization headers — anonymous request.
                 setBody(
@@ -1220,6 +1272,11 @@ object Innertube {
                 )
             }.body<JsonObject>()
         }
+        if (visitorData == null) {
+            visitorData = response["responseContext"]?.jsonObject
+                ?.get("visitorData")?.jsonPrimitive?.content
+        }
+        return response
     }
 
     /** First string value under [key] anywhere in [element], depth-first. */

@@ -4,6 +4,9 @@ import java.net.CookieHandler
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import javafx.animation.Animation
+import javafx.animation.KeyFrame
+import javafx.animation.Timeline
 import javafx.application.Platform
 import javafx.concurrent.Worker
 import javafx.geometry.Insets
@@ -16,6 +19,7 @@ import javafx.scene.layout.Priority
 import javafx.scene.layout.Region
 import javafx.scene.web.WebView
 import javafx.stage.Stage
+import javafx.util.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -71,7 +75,34 @@ internal object DesktopWebSignIn {
 
     /** The cookies [service] would send, as a `Cookie` header value. */
     private fun cookies(service: Service): String = runCatching {
-        CookieHandler.getDefault().get(URI(service.cookieUrl), emptyMap())["Cookie"].orEmpty().joinToString("; ")
+        val handler = CookieHandler.getDefault() ?: return@runCatching ""
+        val uris = when (service) {
+            Service.YOUTUBE_MUSIC -> listOf(
+                URI("https://music.youtube.com/"),
+                URI("https://www.youtube.com/"),
+                URI("https://youtube.com/"),
+                URI("https://accounts.youtube.com/"),
+                URI("https://accounts.google.com/"),
+            )
+            Service.SPOTIFY -> listOf(URI(service.cookieUrl))
+        }
+        val cookieMap = linkedMapOf<String, String>()
+        for (uri in uris) {
+            val list = handler.get(uri, emptyMap())["Cookie"].orEmpty()
+            for (header in list) {
+                header.split(';').forEach { entry ->
+                    val trimmed = entry.trim()
+                    if (trimmed.isNotEmpty() && '=' in trimmed) {
+                        val key = trimmed.substringBefore('=').trim()
+                        val value = trimmed.substringAfter('=').trim()
+                        if (key.isNotEmpty() && !cookieMap.containsKey(key)) {
+                            cookieMap[key] = value
+                        }
+                    }
+                }
+            }
+        }
+        cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
     }.getOrDefault("")
 
     private fun youtubeSession(): String? =
@@ -95,6 +126,7 @@ internal object DesktopWebSignIn {
         private val where = Label().apply { style = "-fx-text-fill: #aaaaaa;" }
         private var view: WebView? = null
         private var storage: Path? = null
+        private var poller: Timeline? = null
         private var done = false
 
         init {
@@ -109,8 +141,20 @@ internal object DesktopWebSignIn {
             }
             root.bottom = bar
             stage.scene = Scene(root, 480.0, 760.0)
-            // Closing the window is the listener cancelling.
-            stage.setOnHidden { cancel() }
+            // Closing the window completes successfully if session is already captured, else cancels.
+            stage.setOnHidden {
+                if (!done) {
+                    val session = when (service) {
+                        Service.YOUTUBE_MUSIC -> youtubeSession()
+                        Service.SPOTIFY -> spotifySession()
+                    }
+                    if (session != null) {
+                        complete(Result.success(session))
+                    } else {
+                        cancel()
+                    }
+                }
+            }
             load()
         }
 
@@ -131,21 +175,48 @@ internal object DesktopWebSignIn {
             val next = WebView().also { view = it }
             val engine = next.engine
             engine.userDataDirectory = folder.toFile()
-            engine.locationProperty().addListener { _, _, url -> where.text = hostOf(url) }
+            engine.locationProperty().addListener { _, _, url ->
+                where.text = hostOf(url)
+                checkSession(url.orEmpty())
+            }
             engine.loadWorker.stateProperty().addListener { _, _, state ->
-                if (state == Worker.State.SUCCEEDED && view === next) onPage(engine.location.orEmpty())
+                if (view === next) checkSession(engine.location.orEmpty())
             }
             confirm.isDisable = true
             root.center = next
+            val timeline = Timeline(
+                KeyFrame(Duration.millis(500.0), { _ ->
+                    if (view === next && !done) {
+                        checkSession(engine.location.orEmpty())
+                    }
+                }),
+            ).apply {
+                cycleCount = Animation.INDEFINITE
+                play()
+            }
+            poller = timeline
             engine.load(service.startUrl)
         }
 
-        private fun onPage(url: String) {
+        private fun checkSession(url: String) {
+            if (done) return
             when (service) {
-                // Reaching YouTube Music only enables confirming: a multi-channel login may still be
-                // choosing its identity on this page.
-                Service.YOUTUBE_MUSIC ->
-                    confirm.isDisable = !url.startsWith("https://music.youtube.com") || youtubeSession() == null
+                // Reaching YouTube Music enables confirming once a signing secret exists in cookies.
+                Service.YOUTUBE_MUSIC -> {
+                    val session = youtubeSession()
+                    if (session != null) {
+                        confirm.isDisable = false
+                        confirm.style = "-fx-background-color: #ff0033; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 6 14 6 14; -fx-background-radius: 4; -fx-cursor: hand;"
+                        confirm.text = "Use this profile ✓"
+                        where.text = "Signed in! Click 'Use this profile' or close this window."
+                        where.style = "-fx-text-fill: #4caf50; -fx-font-weight: bold;"
+                    } else {
+                        confirm.isDisable = true
+                        confirm.style = ""
+                        confirm.text = "Use this profile"
+                        where.style = "-fx-text-fill: #aaaaaa;"
+                    }
+                }
                 Service.SPOTIFY -> if (url.startsWith("https://open.spotify.com")) {
                     spotifySession()?.let { complete(Result.success(it)) }
                 }
@@ -167,6 +238,8 @@ internal object DesktopWebSignIn {
 
         /** Stops the current page and deletes its storage. */
         private fun discard() {
+            poller?.stop()
+            poller = null
             view?.engine?.load("about:blank")
             view = null
             storage?.toFile()?.let { folder ->

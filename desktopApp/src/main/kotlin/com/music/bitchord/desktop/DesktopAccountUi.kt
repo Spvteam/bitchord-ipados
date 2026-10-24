@@ -334,7 +334,7 @@ internal fun DesktopSignInDialog(
             }
             Text(
                 if (webSignIn) {
-                    "Sign in with Google in a BitChord window, then choose \"Use this profile\"."
+                    "Sign in with Google in the popup window. When finished, click \"Use this profile\" or close the window."
                 } else {
                     DesktopStrings[
                         "d_google_signs_in_inside_a_browser",
@@ -413,7 +413,7 @@ internal fun DesktopSignInDialog(
                                     Text("Sign in with Google", color = Color.White)
                                     Text(
                                         if (busy == WEB_SIGN_IN) {
-                                            "Finish in the sign-in window, then choose \"Use this profile\""
+                                            "Finish in the sign-in window, then click \"Use this profile\" or close it"
                                         } else {
                                             "Opens Google's sign-in page in a BitChord window"
                                         },

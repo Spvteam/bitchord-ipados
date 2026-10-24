@@ -1033,6 +1033,13 @@ object YtMusicRepository {
                 Log.w(TAG, "$label rejected; refreshing active session context once")
                 Innertube.refreshSessionScope()
                 block()
+            }.recoverCatching { failure ->
+                if (failure is CancellationException) throw failure
+                val msg = failure.message.orEmpty()
+                if (msg.contains("401") || msg.contains("UNAUTHENTICATED", ignoreCase = true) || msg.contains("Unauthorized", ignoreCase = true)) {
+                    throw IllegalStateException("Your YouTube Music session has expired. Please sign in again.", failure)
+                }
+                throw failure
             }
                 // runCatching catches Throwable, cancellation included, which
                 // would turn "the user typed another letter" into a failed
